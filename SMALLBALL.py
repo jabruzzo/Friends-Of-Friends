@@ -14,13 +14,13 @@ N_ROUNDS = 400
 PARAM_ATTITUDES = [0,1,2,3,4,5,6,7,8,9]
 PARAM_DIST = [.1,.1,.1,.1,.1,.1,.1,.1,.1,.1]
 
-PARAM_N = 100
-PARAM_D = 5
-PARAM_P = 0.05
-PARAM_Q = 0.01
+PARAM_N = 100 # number of agents
+PARAM_D = 5 # number of ties
+PARAM_P = 0.05 # the probability that the node will accept
+PARAM_Q = 0.01 #
 
 
-# Useful functions that allow me to use lists like sets. These correspond to 
+# Useful functions that allow me to use lists like sets. These correspond to
 # the traditional mathematical definitions of union, intersection, and
 # set difference:
 
@@ -44,11 +44,15 @@ def set_difference(l1, l2):
 
 # Calculates the average disagreement statistic that I'm using to measure
 # convergence
-def average_disagreement(G):
+'''
+change average_disagreement to
+1. SD
+2. Z score
+'''
 
+def average_disagreement(G):
 	# Empty vector to hold each node's average disagreement value
 	disagreements = []
-
 	# For each node:
 	for i in G.nodes():
 
@@ -66,7 +70,7 @@ def average_disagreement(G):
 	return np.mean(disagreements)
 
 
-# Function that returns a random boolean - TRUE if the agent accepts the 
+# Function that returns a random boolean - TRUE if the agent accepts the
 # friend (which the agent does with probability PARAM_P), and FALSE if it
 # does not
 def accept_friend():
@@ -78,8 +82,6 @@ def accept_friend():
 		return True
 
 	return False
-
-
 
 # Returns a random boolean representing whether or not the target "sees"
 # the "person it may know"
@@ -172,9 +174,9 @@ def simulate(G):
 # this version of the model
 def initialize_attitudes(G):
 
-	# Right now, I'm using the following heuristic to fix the attitudes: I 
-	# pick some reference node at random. Then the opinions of all other 
-	# nodes are the length of the shortest path from those nodes to the 
+	# Right now, I'm using the following heuristic to fix the attitudes: I
+	# pick some reference node at random. Then the opinions of all other
+	# nodes are the length of the shortest path from those nodes to the
 	# reference node. This is just a placeholder until we get the "51%"
 	# issue straightened out
 
@@ -191,7 +193,7 @@ def initialize_attitudes(G):
 	attitude_dict = dict(zip(G.nodes(), attitudes))
 
 	nx.set_node_attributes(G, attitude_dict, name = 'attitude')
-	
+
 
 
 
@@ -218,7 +220,7 @@ def main():
 
 		avg_disagreement_vals.append(average_disagreement(G))
 
-	# Plot the average disagreement sample path after the desired number 
+	# Plot the average disagreement sample path after the desired number
 	# of time steps
 	plt.plot(range(N_ROUNDS), avg_disagreement_vals)
 	plt.show()
