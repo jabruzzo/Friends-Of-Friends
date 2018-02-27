@@ -3,24 +3,31 @@
 import math
 import random
 import numpy as np
+import scipy as sp
 import networkx as nx
 import matplotlib.pyplot as plt
 import sets
 
-
 # Constants
-N_ROUNDS = 400
+N_ROUNDS = 300
 
-PARAM_ATTITUDES = [0,1,2,3,4,5,6,7,8,9]
-PARAM_DIST = [.1,.1,.1,.1,.1,.1,.1,.1,.1,.1]
+# Number of possible attitudes:
+PARAM_N_ATTITUDES = 10
 
-PARAM_N = 100 # number of agents
-PARAM_D = 5 # number of ties
-PARAM_P = 0.05 # the probability that the node will accept
-PARAM_Q = 0.01 #
+# Parameter controlling mean/variance over attitudes:
+PARAM_Q = 0.5
+
+# Number of agents:
+PARAM_N = 100
+
+# Number of initial connections per agent:
+PARAM_D = 5
+
+# Probability of accepting friendship:
+PARAM_P = 0.05
 
 
-# Useful functions that allow me to use lists like sets. These correspond to
+# Useful functions that allow me to use lists like sets. These correspond to 
 # the traditional mathematical definitions of union, intersection, and
 # set difference:
 
@@ -30,10 +37,12 @@ def union(l1, l2):
     return list(set(l1) | set(l2))
 
 
+
 # Returns A AND B
 def intersection(l1, l2):
 
 	return list(set(l1) & set(l2))
+
 
 
 # Returns (in A) AND NOT (in B)
@@ -42,35 +51,38 @@ def set_difference(l1, l2):
 	return list(set(l1) - set(l2))
 
 
-# Calculates the average disagreement statistic that I'm using to measure
-# convergence
-'''
-change average_disagreement to
-1. SD
-2. Z score
-'''
 
-def average_disagreement(G):
-	# Empty vector to hold each node's average disagreement value
-	disagreements = []
+# Calculates the z-score between each node and its neighbors
+def zscores(G):
+
+	# Empty vector to hold all nodes' z-scores
+	scores = []
+
 	# For each node:
 	for i in G.nodes():
 
-		d = 0
+		# Calculate the mean / sd of its neighbors' opinions
+		m = []
 
-		# Calculate the average opinion difference between it and its
-		# neighbors and append it to the vector
 		for n in G.neighbors(i):
 
-			d += abs(G.node[i]['attitude'] - G.node[n]['attitude'])
+			m.append(G.node[n]['attitude'])
 
-		disagreements.append(float(d) / len(list(G.neighbors(i))))
+		mu = np.mean(m)
+		sigma = np.std(m)
 
-	# Return the average of the average opinion differences
-	return np.mean(disagreements)
+		# Calculate z-score
+		z = (G.node[i]['attitude'] - mu) / sigma
+
+		# Add z-score to vector
+		scores.append(z)
+
+	# Returns the z-score vector
+	return scores
 
 
-# Function that returns a random boolean - TRUE if the agent accepts the
+
+# Function that returns a random boolean - TRUE if the agent accepts the 
 # friend (which the agent does with probability PARAM_P), and FALSE if it
 # does not
 def accept_friend():
@@ -83,35 +95,13 @@ def accept_friend():
 
 	return False
 
-# Returns a random boolean representing whether or not the target "sees"
-# the "person it may know"
-def sees_agent(pr):
-
-	p = random.random()
-
-	if p < pr:
-
-		return True
-
-	return False
-
-
-
-# Returns the probability that the "person you may know" is seen by the target
-# It's just the geometric distribution with parameter PARAM_Q. This is written
-# such that people with more friends in common are more likely to be "seen"
-# by the target
-def pr_visible_function(n_common_neighbors):
-
-	return PARAM_Q * ((1 - PARAM_Q) ** n_common_neighbors)
-
 
 
 # Manages the simulation of the model
 def simulate(G):
 
 	# Selects 50% of the agents to update
-	target_set = np.random.choice(G.nodes(), size = len(G.nodes())/2, replace = False)
+	target_set = np.random.choice(G.nodes(), size = int(len(G.nodes())/2), replace = False)
 
 	# An empty vector - will contain all new connections to be added to the
 	# graph
@@ -142,6 +132,11 @@ def simulate(G):
 
 			people_you_may_know = union(people_you_may_know, neighbors_of_neighbors)
 
+		# Create a variable to hold the node with the greatest number of common
+		# neighbors with the target and the number of common neighbors
+		max_node = 0
+		max_neighbors = 0
+
 		# For each agent in "people you may know"
 		for p in people_you_may_know:
 
@@ -151,16 +146,19 @@ def simulate(G):
 
 			n_common_neighbors = len(common_neighbors)
 
-			# Does the target node see this "person it may know"? This
-			# function is written such that people with more friends in
-			# common are "seen" more frequently
-			pr_shown_to_target = pr_visible_function(n_common_neighbors)
+			# If p has more common neighbors than the agent currently listed
+			# as having most common neighbors:
+			if n_common_neighbors > max_neighbors:
 
-			# If the target sees the agent and accepts it as a friend:
-			if sees_agent(pr_shown_to_target) and accept_friend():
+				# List p as having the most common neighbors
+				max_node = p
+				max_neighbors = n_common_neighbors
 
-				# Add the edge to the edges to be added to the graph at the
-				# end of the time step
+			# If the target accepts p as a friend:
+			if accept_friend():
+
+				# Add the edge (t,p) to the edges to be added to the graph at 
+				# the end of the time step
 				sorted_edge = tuple(sorted((t, p)))
 
 				edges_to_add = union(edges_to_add, [sorted_edge])
@@ -171,29 +169,15 @@ def simulate(G):
 
 
 # Function initializes the attitude / opinion values, which remain fixed in
-# this version of the model
+# this version of the model. The values are initialized from a binomial
+# distribution with parameters n = PARAM_N_ATTITUDES and p = PARAM_Q. 
 def initialize_attitudes(G):
 
-	# Right now, I'm using the following heuristic to fix the attitudes: I
-	# pick some reference node at random. Then the opinions of all other
-	# nodes are the length of the shortest path from those nodes to the
-	# reference node. This is just a placeholder until we get the "51%"
-	# issue straightened out
-
-	reference = np.random.choice(list(G.nodes()))
-
-	attitudes = []
-
-	for i in G.nodes():
-
-		sp = nx.shortest_path_length(G, reference, i)
-
-		attitudes.append(sp)
+	attitudes = np.random.binomial(PARAM_N_ATTITUDES, PARAM_Q, size = PARAM_N)
 
 	attitude_dict = dict(zip(G.nodes(), attitudes))
 
-	nx.set_node_attributes(G, attitude_dict, name = 'attitude')
-
+	nx.set_node_attributes(G, attitude_dict, name = 'attitude')	
 
 
 
@@ -207,22 +191,23 @@ def main():
 	# Initialize the opinions / attitudes
 	initialize_attitudes(G)
 
-
 	# Empty vector to hold the average disagreement at each time step
-	avg_disagreement_vals = []
+	zmatrix = np.zeros((PARAM_N, N_ROUNDS), dtype = float)
 
 	# For the desired number of time steps
 	for i in range(N_ROUNDS):
 
-
 		# Run the simulation and add to the list of average disagreements
 		simulate(G)
 
-		avg_disagreement_vals.append(average_disagreement(G))
+		# Calculate the z-score for all the nodes in the graph
+		zvec = zscores(G)
+		zmatrix[:,i] = np.asarray(zvec, dtype = float)
 
-	# Plot the average disagreement sample path after the desired number
-	# of time steps
-	plt.plot(range(N_ROUNDS), avg_disagreement_vals)
+	# Plot the z-scores for all the nodes at each time step
+	for i in range(PARAM_N):
+		plt.plot(range(N_ROUNDS), zmatrix[i,:])
+
 	plt.show()
 
 
